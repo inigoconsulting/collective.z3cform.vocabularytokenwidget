@@ -3,9 +3,38 @@
     xmlns:five="http://namespaces.zope.org/five"
     xmlns:i18n="http://namespaces.zope.org/i18n"
     xmlns:genericsetup="http://namespaces.zope.org/genericsetup"
+    xmlns:browser="http://namespaces.zope.org/browser"
     i18n_domain="collective.z3cform.vocabularytokenwidget">
 
-  <five:registerPackage package="." initialize=".initialize" />
+    <five:registerPackage package="." initialize=".initialize" />
+
+    <browser:page
+          for="*"
+          name="json-vocabulary"
+          permission="zope2.Public"
+          class=".vocabularytokenwidget.ExportVocabularyAsJSON"
+          />
+
+    <class class=".vocabularytokenwidget.VocabularyTokenWidget">
+        <require
+            permission="zope.Public"
+            interface=".interfaces.IVocabularyTokenWidget"
+        />
+    </class>
+
+  <genericsetup:registerProfile
+      name="default"
+      title="collective.z3cform.vocabularytokenwidget"
+      directory="profiles/default"
+      description="Installs the collective.z3cform.vocabularytokenwidget package"
+      provides="Products.GenericSetup.interfaces.EXTENSION"
+      />
+
+    <browser:resourceDirectory
+        name="collective.z3cform.vocabularytokenwidget"
+        directory="static"
+        />
+
 
   <!-- -*- extra stuff goes here -*- -->
   

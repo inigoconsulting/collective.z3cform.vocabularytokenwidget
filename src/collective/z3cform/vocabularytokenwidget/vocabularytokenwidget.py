@@ -12,6 +12,8 @@ from zope.browserpage.viewpagetemplatefile import ViewPageTemplateFile
 
 from collective.z3cform.vocabularytokenwidget.interfaces import IVocabularyTokenWidget
 from collective.z3cform.widgets.interfaces import ILayer
+from zope.component import getUtility
+from zope.schema.interfaces import IVocabularyFactory
 
 import json
 
@@ -27,10 +29,13 @@ class ExportVocabularyAsJSON(BrowserView):
 
     def __call__(self):
         self.request.response.setHeader("Content-type", "application/json")
+        vocab = getUtility(IVocabularyFactory,
+                            name=self.request.get('vocabulary'))(self.context)
+        
         if 'q' in self.request.keys():
             query = self.request['q']
-            keys = self.context.portal_catalog.uniqueValuesFor('Subject')
-            keys = [k for k in keys if query.lower() in k.lower()]
+            keys = [(k.value, k.title) for k in vocab if (
+                        query.lower() in k.title.lower())]
         else:
             keys = []
 
@@ -38,15 +43,17 @@ class ExportVocabularyAsJSON(BrowserView):
         tokens = map(self._tokenize, keys[:10])
         return json.dumps(tokens)
 
-    def _tokenize(self, value):
+    def _tokenize(self, value_title):
+        value, title = value_title
         if isinstance(value, str):
             value = value.decode('utf-8')
+            title = title.decode('utf-8')
 
         return {'id': '%s' % value.replace(u"'", u"\\'"),
-                'name': '%s' % value.replace(u"'", u"\\'")}
+                'name': '%s' % title.replace(u"'", u"\\'")}
 
 
-class TokenInputWidget(textarea.TextAreaWidget):
+class VocabularyTokenWidget(textarea.TextAreaWidget):
     """Widget for adding new keywords and autocomplete with the ones in the
     system."""
     zope.interface.implementsOnly(IVocabularyTokenWidget)
@@ -61,21 +68,29 @@ class TokenInputWidget(textarea.TextAreaWidget):
             var newValues = '%(newtags)s';
             var oldValues = [%(oldtags)s];
             $('#%(id)s').data('klass','%(klass)s');
-            keywordTokenInputActivate('%(id)s', newValues, oldValues);
+            vocabularyTokenInputActivate('%(id)s', newValues, oldValues);
         });
     })(jQuery);
     """
-    def __init__(self, request):
-        super(TokenInputWidget, self).__init__(request)
-        self.vocabulary = 'plone.principalsource.Users'
+    def __init__(self, request, vocabulary=None, indexName='Subject'):
+        super(VocabularyTokenWidget, self).__init__(request)
+        self.vocabulary = vocabulary
+        self.indexName = indexName
 
     def js(self):
         if not ILayer.providedBy(self.request):
             return ""
-        old_values = self.context.Subject()
+        try:
+            old_values = self.field.get(self.context)
+        except:
+            old_values = []
+
         old_tags = u""
         index = 0
-        newtags = self.context.absolute_url() + "/json-vocabulary?vocabulary=%s" % (self.vocabulary)
+        if self.vocabulary:
+            newtags = self.context.absolute_url() + "/json-vocabulary?vocabulary=%s" % (self.vocabulary)
+        elif self.indexName:
+            newtags = self.context.portal_catalog.getUniqueValuesFor(self.indexName)
         #prepopulate
         for index, value in enumerate(old_values):
             if isinstance(value, str):
@@ -102,5 +117,7 @@ class TokenInputWidget(textarea.TextAreaWidget):
 @zope.interface.implementer(interfaces.IFieldWidget)
 def VocabularyTokenFieldWidget(field, request):
     """IFieldWidget factory for TokenInputWidget."""
-    return widget.FieldWidget(field, VocabularyTokenWidget(request))
+    vocabulary = field.value_type.vocabularyName
+    return widget.FieldWidget(field, VocabularyTokenWidget(request,
+        vocabulary=vocabulary))
 
